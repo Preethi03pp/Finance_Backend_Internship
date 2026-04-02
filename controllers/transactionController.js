@@ -1,6 +1,6 @@
 const Transaction = require('../models/Transaction');
 
-// ➕ Add transaction
+// ➕ Add transaction (Admin only)
 const addTransaction = async (req, res) => {
   try {
     const { amount, type, category, description } = req.body;
@@ -16,7 +16,7 @@ const addTransaction = async (req, res) => {
       type,
       category,
       description,
-      user: req.user.id // comes from protect middleware
+      user: req.user.id
     });
 
     res.status(201).json({
@@ -28,19 +28,92 @@ const addTransaction = async (req, res) => {
   }
 };
 
-// @desc Get all transactions for logged-in user
-// @route GET /api/transactions
+// 📄 Get all transactions (with filtering, search, pagination)
 const getTransactions = async (req, res) => {
   try {
-    const transactions = await Transaction.find({ user: req.user.id });
-    res.status(200).json({ transactions });
+    const {
+      type,
+      category,
+      startDate,
+      endDate,
+      page = 1,
+      limit = 5,
+      search
+    } = req.query;
+
+    let filter = {};
+
+    // 🔒 Restrict non-admin users to their own data
+    if (req.user.role !== 'admin') {
+      filter.user = req.user.id;
+    }
+
+    // 🔍 Filtering
+    if (type) filter.type = type;
+    if (category) filter.category = category;
+
+    if (startDate && endDate) {
+      filter.date = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate)
+      };
+    }
+
+    // 🔍 Search
+    if (search) {
+      filter.description = {
+        $regex: search,
+        $options: 'i'
+      };
+    }
+
+    // 📄 Pagination
+    const skip = (page - 1) * limit;
+
+    const transactions = await Transaction.find(filter)
+      .skip(skip)
+      .limit(parseInt(limit))
+      .sort({ createdAt: -1 });
+
+    const total = await Transaction.countDocuments(filter);
+
+    res.status(200).json({
+      total,
+      page: parseInt(page),
+      pages: Math.ceil(total / limit),
+      data: transactions
+    });
+
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// @desc Update a transaction
-// @route PUT /api/transactions/:id
+// 🔍 Get single transaction
+const getTransactionById = async (req, res) => {
+  try {
+    const transaction = await Transaction.findById(req.params.id);
+
+    if (!transaction) {
+      return res.status(404).json({ message: "Transaction not found" });
+    }
+
+    // 🔒 Role-based ownership check
+    if (
+      req.user.role !== 'admin' &&
+      transaction.user.toString() !== req.user.id
+    ) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    res.status(200).json(transaction);
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ✏️ Full update (PUT)
 const updateTransaction = async (req, res) => {
   try {
     const transaction = await Transaction.findById(req.params.id);
@@ -49,8 +122,11 @@ const updateTransaction = async (req, res) => {
       return res.status(404).json({ message: "Transaction not found" });
     }
 
-    // Make sure user owns the transaction
-    if (transaction.user.toString() !== req.user.id) {
+    // 🔒 Role-based ownership check
+    if (
+      req.user.role !== 'admin' &&
+      transaction.user.toString() !== req.user.id
+    ) {
       return res.status(403).json({ message: "Not authorized" });
     }
 
@@ -64,34 +140,13 @@ const updateTransaction = async (req, res) => {
       message: "Transaction updated successfully ✅",
       updatedTransaction
     });
+
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// @desc Get a transaction by ID
-// @route GET /api/transactions/:id
-const getTransactionById = async (req, res) => {
-  try {
-    const transaction = await Transaction.findById(req.params.id);
-
-    if (!transaction) {
-      return res.status(404).json({ message: "Transaction not found" });
-    }
-
-    // Make sure the transaction belongs to the logged-in user
-    if (transaction.user.toString() !== req.user.id) {
-      return res.status(403).json({ message: "Not authorized" });
-    }
-
-    res.status(200).json(transaction);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// @desc Update a transaction by ID
-// @route PATCH /api/transactions/:id
+// ✏️ Partial update (PATCH)
 const partialUpdateTransaction = async (req, res) => {
   try {
     const transaction = await Transaction.findById(req.params.id);
@@ -100,11 +155,14 @@ const partialUpdateTransaction = async (req, res) => {
       return res.status(404).json({ message: "Transaction not found" });
     }
 
-    // Make sure the transaction belongs to the logged-in user
-    if (transaction.user.toString() !== req.user.id) {
+    // 🔒 Role-based ownership check
+    if (
+      req.user.role !== 'admin' &&
+      transaction.user.toString() !== req.user.id
+    ) {
       return res.status(403).json({ message: "Not authorized" });
     }
-    // Update fields
+
     const { amount, type, category, description } = req.body;
 
     if (amount !== undefined) transaction.amount = amount;
@@ -118,12 +176,13 @@ const partialUpdateTransaction = async (req, res) => {
       message: "Transaction updated successfully ✅",
       transaction: updatedTransaction
     });
+
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
-// @desc Delete a transaction
-// @route DELETE /api/transactions/:id
+
+// ❌ Delete transaction
 const deleteTransaction = async (req, res) => {
   try {
     const transaction = await Transaction.findById(req.params.id);
@@ -132,37 +191,94 @@ const deleteTransaction = async (req, res) => {
       return res.status(404).json({ message: "Transaction not found" });
     }
 
-    // Make sure user owns the transaction
-    if (transaction.user.toString() !== req.user.id) {
+    // 🔒 Role-based ownership check
+    if (
+      req.user.role !== 'admin' &&
+      transaction.user.toString() !== req.user.id
+    ) {
       return res.status(403).json({ message: "Not authorized" });
     }
 
     await transaction.deleteOne();
 
-    res.status(200).json({ message: "Transaction deleted successfully ✅" });
+    res.status(200).json({
+      message: "Transaction deleted successfully ✅"
+    });
+
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// @desc Get dashboard summary
-// @route GET /api/transactions/summary
+// 📊 Summary API
 const getSummary = async (req, res) => {
   try {
-    const transactions = await Transaction.find({ user: req.user.id });
+    let match = {};
 
-    const summary = transactions.reduce(
-      (acc, curr) => {
-        if (curr.type === "income") acc.totalIncome += curr.amount;
-        if (curr.type === "expense") acc.totalExpenses += curr.amount;
-        return acc;
+    // 🔒 Restrict non-admin users
+    if (req.user.role !== 'admin') {
+      match.user = req.user._id;
+    }
+
+    // 1️⃣ Total Income & Expense
+    const totals = await Transaction.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: "$type",
+          total: { $sum: "$amount" }
+        }
+      }
+    ]);
+
+    let totalIncome = 0;
+    let totalExpenses = 0;
+
+    totals.forEach(t => {
+      if (t._id === "income") totalIncome = t.total;
+      if (t._id === "expense") totalExpenses = t.total;
+    });
+
+    // 2️⃣ Category-wise totals
+    const categoryData = await Transaction.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: "$category",
+          total: { $sum: "$amount" }
+        }
+      }
+    ]);
+
+    // 3️⃣ Monthly trends
+    const monthlyData = await Transaction.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: {
+            year: { $year: "$date" },
+            month: { $month: "$date" }
+          },
+          total: { $sum: "$amount" }
+        }
       },
-      { totalIncome: 0, totalExpenses: 0 }
-    );
+      { $sort: { "_id.year": 1, "_id.month": 1 } }
+    ]);
 
-    summary.netBalance = summary.totalIncome - summary.totalExpenses;
+    // 4️⃣ Recent transactions
+    const recentTransactions = await Transaction.find(match)
+      .sort({ createdAt: -1 })
+      .limit(5);
 
-    res.status(200).json({ summary });
+    res.status(200).json({
+      totalIncome,
+      totalExpenses,
+      netBalance: totalIncome - totalExpenses,
+      categoryBreakdown: categoryData,
+      monthlyTrends: monthlyData,
+      recentTransactions
+    });
+
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -171,9 +287,9 @@ const getSummary = async (req, res) => {
 module.exports = {
   addTransaction,
   getTransactions,
-  updateTransaction,
-  deleteTransaction,
   getTransactionById,
+  updateTransaction,
   partialUpdateTransaction,
+  deleteTransaction,
   getSummary
 };
