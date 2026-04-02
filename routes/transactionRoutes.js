@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { protect } = require('../middleware/authMiddleware');
+const { protect, authorizeRoles } = require('../middleware/authMiddleware');
 
 const {
   addTransaction,
@@ -12,12 +12,13 @@ const {
   getSummary
 } = require('../controllers/transactionController');
 
-router.post('/', protect, addTransaction);
-router.get('/', protect, getTransactions);
-router.get('/:id', protect, getTransactionById); 
-router.patch('/:id', protect, partialUpdateTransaction); 
-router.put('/:id', protect, updateTransaction);
-router.delete('/:id', protect, deleteTransaction);
-router.get('/summary', protect, getSummary);
+router.post('/', protect, authorizeRoles('admin'), addTransaction);
+router.patch('/:id', protect, authorizeRoles('admin'), partialUpdateTransaction); 
+router.put('/:id', protect, authorizeRoles('admin'), updateTransaction);
+router.delete('/:id', protect, authorizeRoles('admin'), deleteTransaction);
+router.get('/summary', protect, authorizeRoles('analyst', 'admin'), getSummary);
+router.get('/', protect, authorizeRoles('viewer', 'analyst', 'admin'), getTransactions);
+router.get('/:id', protect, authorizeRoles('viewer', 'analyst', 'admin'), getTransactionById); 
+
 
 module.exports = router;
