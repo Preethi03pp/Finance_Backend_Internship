@@ -95,8 +95,9 @@ const getTransactionById = async (req, res) => {
     const transaction = await Transaction.findById(req.params.id);
 
     if (!transaction) {
-      return res.status(404).json({ message: "Transaction not found" });
-    }
+  res.status(404);
+  throw new Error("Transaction not found");
+}
 
     // 🔒 Role-based ownership check
     if (
@@ -118,9 +119,11 @@ const updateTransaction = async (req, res) => {
   try {
     const transaction = await Transaction.findById(req.params.id);
 
+    
     if (!transaction) {
-      return res.status(404).json({ message: "Transaction not found" });
-    }
+  res.status(404);
+  throw new Error("Transaction not found");
+}
 
     // 🔒 Role-based ownership check
     if (
@@ -152,8 +155,9 @@ const partialUpdateTransaction = async (req, res) => {
     const transaction = await Transaction.findById(req.params.id);
 
     if (!transaction) {
-      return res.status(404).json({ message: "Transaction not found" });
-    }
+  res.status(404);
+  throw new Error("Transaction not found");
+}
 
     // 🔒 Role-based ownership check
     if (
@@ -188,8 +192,9 @@ const deleteTransaction = async (req, res) => {
     const transaction = await Transaction.findById(req.params.id);
 
     if (!transaction) {
-      return res.status(404).json({ message: "Transaction not found" });
-    }
+  res.status(404);
+  throw new Error("Transaction not found");
+}
 
     // 🔒 Role-based ownership check
     if (
@@ -284,6 +289,43 @@ const getSummary = async (req, res) => {
   }
 };
 
+// 📊 Stats API
+const getStats = async (req, res) => {
+  try {
+    let match = {};
+
+    // 🔒 Restrict non-admin users
+    if (req.user.role !== 'admin') {
+      match.user = req.user.id;
+    }
+
+    const transactions = await Transaction.find(match);
+
+    const expenses = transactions.filter(t => t.type === "expense");
+
+    if (expenses.length === 0) {
+      return res.status(200).json({
+        message: "No expense data available"
+      });
+    }
+
+    const amounts = expenses.map(e => e.amount);
+
+    const stats = {
+      highestExpense: Math.max(...amounts),
+      lowestExpense: Math.min(...amounts),
+      averageExpense:
+        amounts.reduce((a, b) => a + b, 0) / amounts.length
+    };
+
+    res.status(200).json(stats);
+
+  } catch (error) {
+    res.status(500);
+    throw new Error(error.message);
+  }
+};
+
 module.exports = {
   addTransaction,
   getTransactions,
@@ -291,5 +333,6 @@ module.exports = {
   updateTransaction,
   partialUpdateTransaction,
   deleteTransaction,
-  getSummary
+  getSummary,
+  getStats
 };
