@@ -5,7 +5,12 @@ const jwt = require('jsonwebtoken');
 // @route POST /api/auth/register
 const registerUser = async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password } = req.body;
+
+    // basic validation
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
 
     // check if user exists
     const userExists = await User.findOne({ email });
@@ -17,17 +22,23 @@ const registerUser = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // create user
+    // create user (FORCE DEFAULT ROLE)
     const user = await User.create({
       name,
       email,
       password: hashedPassword,
-      role
+      role: "viewer" // 🔒 always default
     });
 
+    // send safe response (NO PASSWORD)
     res.status(201).json({
       message: "User registered successfully",
-      user
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      }
     });
 
   } catch (error) {
@@ -40,19 +51,22 @@ const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // check user
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(400).json({ message: "Invalid credentials" });
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email and password required" });
     }
 
-    // compare password
+    const user = await User.findOne({ email });
+
+    if (!user || !user.isActive) {
+      return res.status(400).json({ message: "Invalid credentials or inactive user" });
+    }
+
     const isMatch = await bcrypt.compare(password, user.password);
+
     if (!isMatch) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    // create token
     const token = jwt.sign(
       { id: user._id, role: user.role },
       process.env.JWT_SECRET,
@@ -61,7 +75,12 @@ const loginUser = async (req, res) => {
 
     res.json({
       message: "Login successful",
-      token
+      token,
+      user: {
+        _id: user._id,
+        name: user.name,
+        role: user.role
+      }
     });
 
   } catch (error) {

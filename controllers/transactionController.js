@@ -1,13 +1,14 @@
 const Transaction = require('../models/Transaction');
 
+
 // ➕ Add transaction (Admin only)
 const addTransaction = async (req, res) => {
   try {
-    const { amount, type, category, description } = req.body;
+    const { amount, type, category, description, date } = req.body;
 
-    if (!amount || !type) {
+    if (!amount || !type || !category) {
       return res.status(400).json({
-        message: "Amount and type are required"
+        message: "Amount, type, and category are required"
       });
     }
 
@@ -16,19 +17,22 @@ const addTransaction = async (req, res) => {
       type,
       category,
       description,
-      user: req.user.id
+      date: date || Date.now(),
+      user: req.user._id // ✅ FIXED
     });
 
     res.status(201).json({
       message: "Transaction added successfully ✅",
       transaction
     });
+
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// 📄 Get all transactions (with filtering, search, pagination)
+
+// 📄 Get all transactions
 const getTransactions = async (req, res) => {
   try {
     const {
@@ -43,12 +47,11 @@ const getTransactions = async (req, res) => {
 
     let filter = {};
 
-    // 🔒 Restrict non-admin users to their own data
+    // 🔒 Restrict non-admin users
     if (req.user.role !== 'admin') {
-      filter.user = req.user.id;
+      filter.user = req.user._id; // ✅ FIXED
     }
 
-    // 🔍 Filtering
     if (type) filter.type = type;
     if (category) filter.category = category;
 
@@ -59,7 +62,6 @@ const getTransactions = async (req, res) => {
       };
     }
 
-    // 🔍 Search
     if (search) {
       filter.description = {
         $regex: search,
@@ -67,13 +69,12 @@ const getTransactions = async (req, res) => {
       };
     }
 
-    // 📄 Pagination
     const skip = (page - 1) * limit;
 
     const transactions = await Transaction.find(filter)
       .skip(skip)
       .limit(parseInt(limit))
-      .sort({ createdAt: -1 });
+      .sort({ date: -1 }); // ✅ better than createdAt
 
     const total = await Transaction.countDocuments(filter);
 
@@ -89,20 +90,19 @@ const getTransactions = async (req, res) => {
   }
 };
 
+
 // 🔍 Get single transaction
 const getTransactionById = async (req, res) => {
   try {
     const transaction = await Transaction.findById(req.params.id);
 
     if (!transaction) {
-  res.status(404);
-  throw new Error("Transaction not found");
-}
+      return res.status(404).json({ message: "Transaction not found" }); // ✅ FIXED
+    }
 
-    // 🔒 Role-based ownership check
     if (
       req.user.role !== 'admin' &&
-      transaction.user.toString() !== req.user.id
+      transaction.user.toString() !== req.user._id.toString() // ✅ FIXED
     ) {
       return res.status(403).json({ message: "Not authorized" });
     }
@@ -114,28 +114,32 @@ const getTransactionById = async (req, res) => {
   }
 };
 
+
 // ✏️ Full update (PUT)
 const updateTransaction = async (req, res) => {
   try {
     const transaction = await Transaction.findById(req.params.id);
 
-    
     if (!transaction) {
-  res.status(404);
-  throw new Error("Transaction not found");
-}
+      return res.status(404).json({ message: "Transaction not found" });
+    }
 
-    // 🔒 Role-based ownership check
     if (
       req.user.role !== 'admin' &&
-      transaction.user.toString() !== req.user.id
+      transaction.user.toString() !== req.user._id.toString()
     ) {
       return res.status(403).json({ message: "Not authorized" });
     }
 
     const updatedTransaction = await Transaction.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      {
+        amount: req.body.amount,
+        type: req.body.type,
+        category: req.body.category,
+        description: req.body.description,
+        date: req.body.date
+      },
       { new: true, runValidators: true }
     );
 
@@ -149,30 +153,30 @@ const updateTransaction = async (req, res) => {
   }
 };
 
+
 // ✏️ Partial update (PATCH)
 const partialUpdateTransaction = async (req, res) => {
   try {
     const transaction = await Transaction.findById(req.params.id);
 
     if (!transaction) {
-  res.status(404);
-  throw new Error("Transaction not found");
-}
+      return res.status(404).json({ message: "Transaction not found" });
+    }
 
-    // 🔒 Role-based ownership check
     if (
       req.user.role !== 'admin' &&
-      transaction.user.toString() !== req.user.id
+      transaction.user.toString() !== req.user._id.toString()
     ) {
       return res.status(403).json({ message: "Not authorized" });
     }
 
-    const { amount, type, category, description } = req.body;
+    const { amount, type, category, description, date } = req.body;
 
     if (amount !== undefined) transaction.amount = amount;
     if (type) transaction.type = type;
     if (category) transaction.category = category;
     if (description) transaction.description = description;
+    if (date) transaction.date = date;
 
     const updatedTransaction = await transaction.save();
 
@@ -186,20 +190,19 @@ const partialUpdateTransaction = async (req, res) => {
   }
 };
 
+
 // ❌ Delete transaction
 const deleteTransaction = async (req, res) => {
   try {
     const transaction = await Transaction.findById(req.params.id);
 
     if (!transaction) {
-  res.status(404);
-  throw new Error("Transaction not found");
-}
+      return res.status(404).json({ message: "Transaction not found" });
+    }
 
-    // 🔒 Role-based ownership check
     if (
       req.user.role !== 'admin' &&
-      transaction.user.toString() !== req.user.id
+      transaction.user.toString() !== req.user._id.toString()
     ) {
       return res.status(403).json({ message: "Not authorized" });
     }
@@ -215,17 +218,16 @@ const deleteTransaction = async (req, res) => {
   }
 };
 
+
 // 📊 Summary API
 const getSummary = async (req, res) => {
   try {
     let match = {};
 
-    // 🔒 Restrict non-admin users
     if (req.user.role !== 'admin') {
-      match.user = req.user._id;
+      match.user = req.user._id; // ✅ consistent
     }
 
-    // 1️⃣ Total Income & Expense
     const totals = await Transaction.aggregate([
       { $match: match },
       {
@@ -244,7 +246,6 @@ const getSummary = async (req, res) => {
       if (t._id === "expense") totalExpenses = t.total;
     });
 
-    // 2️⃣ Category-wise totals
     const categoryData = await Transaction.aggregate([
       { $match: match },
       {
@@ -255,7 +256,6 @@ const getSummary = async (req, res) => {
       }
     ]);
 
-    // 3️⃣ Monthly trends
     const monthlyData = await Transaction.aggregate([
       { $match: match },
       {
@@ -270,9 +270,8 @@ const getSummary = async (req, res) => {
       { $sort: { "_id.year": 1, "_id.month": 1 } }
     ]);
 
-    // 4️⃣ Recent transactions
     const recentTransactions = await Transaction.find(match)
-      .sort({ createdAt: -1 })
+      .sort({ date: -1 })
       .limit(5);
 
     res.status(200).json({
@@ -289,14 +288,14 @@ const getSummary = async (req, res) => {
   }
 };
 
+
 // 📊 Stats API
 const getStats = async (req, res) => {
   try {
     let match = {};
 
-    // 🔒 Restrict non-admin users
     if (req.user.role !== 'admin') {
-      match.user = req.user.id;
+      match.user = req.user._id; // ✅ FIXED
     }
 
     const transactions = await Transaction.find(match);
@@ -321,10 +320,10 @@ const getStats = async (req, res) => {
     res.status(200).json(stats);
 
   } catch (error) {
-    res.status(500);
-    throw new Error(error.message);
+    res.status(500).json({ message: error.message });
   }
 };
+
 
 module.exports = {
   addTransaction,

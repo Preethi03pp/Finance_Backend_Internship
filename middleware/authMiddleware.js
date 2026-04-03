@@ -1,40 +1,54 @@
 const jwt = require('jsonwebtoken');
+const User = require('../models/User');
 
-// ✅ Protect middleware
-const protect = (req, res, next) => {
+const protect = async (req, res, next) => {
   let token;
 
   if (
     req.headers.authorization &&
-    req.headers.authorization.startsWith('Bearer')
+    req.headers.authorization.startsWith('Bearer ')
   ) {
     try {
-      // get token
       token = req.headers.authorization.split(' ')[1];
 
-      // verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // attach user info
-      req.user = decoded;
+      const user = await User.findById(decoded.id)
+        .select('_id name email role isActive');
 
-      return next(); // ✅ IMPORTANT (stop further execution)
+      if (!user) {
+        return res.status(401).json({
+          message: "User not found"
+        });
+      }
+
+      if (!user.isActive) {
+        return res.status(403).json({
+          message: "User account is inactive"
+        });
+      }
+
+      req.user = user; // ✅ use _id everywhere
+      next();
+
     } catch (error) {
       return res.status(401).json({
-        message: "Not authorized, token failed"
+        message:
+          error.name === "TokenExpiredError"
+            ? "Token expired"
+            : "Invalid token"
       });
     }
+  } else {
+    return res.status(401).json({
+      message: "Not authorized, no token"
+    });
   }
-
-  return res.status(401).json({
-    message: "Not authorized, no token"
-  });
 };
 
-// ✅ Role-based middleware
+// Role-based middleware
 const authorizeRoles = (...roles) => {
   return (req, res, next) => {
-    // 🔥 Extra safety check
     if (!req.user) {
       return res.status(401).json({
         message: "Not authorized, user missing"
