@@ -48,10 +48,10 @@ const createUser = async (req, res) => {
 // Get All Users (Admin only)
 const getUsers = async (req, res) => {
   try {
-    const users = await User.find().select('-password');
+    const users = await User.find({ isDeleted: false }).select('-password');
     res.status(200).json(users);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: error.message });
   }
 };
 
@@ -220,7 +220,6 @@ const patchUser = async (req, res) => {
 // Delete User (Admin only)
 const deleteUser = async (req, res) => {
   try {
-    // Prevent self delete
     if (req.user._id.toString() === req.params.id) {
       return res.status(403).json({
         message: "You cannot delete your own account"
@@ -233,17 +232,20 @@ const deleteUser = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    await user.deleteOne();
+    if (user.isDeleted) {
+      return res.status(400).json({ message: "User already deleted" });
+    }
 
-    res.status(200).json({
-      message: "User deleted successfully"
-    });
+    user.isDeleted = true;
+    user.isActive = false;
+    await user.save();
+
+    res.status(200).json({ message: "User deleted successfully ✅" });
 
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: error.message });
   }
 };
-
 
 module.exports = {
   createUser,

@@ -1,7 +1,7 @@
 const errorHandler = (err, req, res, next) => {
   console.error(err.stack);
 
-  // ✅ Handle MongoDB invalid ObjectId
+  // Handle MongoDB invalid ObjectId
   if (err.name === 'CastError') {
     return res.status(400).json({
       success: false,

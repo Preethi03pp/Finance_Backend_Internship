@@ -35,7 +35,7 @@ const transactionSchema = new mongoose.Schema(
 
 
 // =======================
-// ⚡ INDEXES (PERFORMANCE)
+// INDEXES (PERFORMANCE)
 // =======================
 transactionSchema.index({ user: 1 });
 transactionSchema.index({ category: 1 });
