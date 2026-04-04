@@ -17,9 +17,8 @@ app.use('/api/transactions', transactionRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/auth', authRoutes);
 app.get('/', (req, res) => {
-  res.send("API Running 🚀");
+  res.send("API Running");
 });
-app.use('/api/transactions', transactionRoutes);
 app.use(errorHandler);
 
 module.exports = app;

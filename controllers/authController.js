@@ -27,7 +27,7 @@ const registerUser = async (req, res) => {
       name,
       email,
       password: hashedPassword,
-      role: "viewer" // 🔒 always default
+      role: "viewer" 
     });
 
     // send safe response (NO PASSWORD)

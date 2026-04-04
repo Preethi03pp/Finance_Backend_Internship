@@ -18,11 +18,11 @@ const addTransaction = async (req, res) => {
       category,
       description,
       date: date || Date.now(),
-      user: req.user._id // ✅ FIXED
+      user: req.user._id 
     });
 
     res.status(201).json({
-      message: "Transaction added successfully ✅",
+      message: "Transaction added successfully",
       transaction
     });
 
@@ -32,7 +32,7 @@ const addTransaction = async (req, res) => {
 };
 
 
-// 📄 Get all transactions
+// Get all transactions
 const getTransactions = async (req, res) => {
   try {
     const {
@@ -46,11 +46,6 @@ const getTransactions = async (req, res) => {
     } = req.query;
 
     let filter = {};
-
-    // 🔒 Restrict non-admin users
-    if (req.user.role !== 'admin') {
-      filter.user = req.user._id; // ✅ FIXED
-    }
 
     if (type) filter.type = type;
     if (category) filter.category = category;
@@ -74,7 +69,7 @@ const getTransactions = async (req, res) => {
     const transactions = await Transaction.find(filter)
       .skip(skip)
       .limit(parseInt(limit))
-      .sort({ date: -1 }); // ✅ better than createdAt
+      .sort({ date: -1 }); 
 
     const total = await Transaction.countDocuments(filter);
 
@@ -91,22 +86,16 @@ const getTransactions = async (req, res) => {
 };
 
 
-// 🔍 Get single transaction
+// Get single transaction
 const getTransactionById = async (req, res) => {
   try {
     const transaction = await Transaction.findById(req.params.id);
 
     if (!transaction) {
-      return res.status(404).json({ message: "Transaction not found" }); // ✅ FIXED
+      return res.status(404).json({ message: "Transaction not found" });
     }
 
-    if (
-      req.user.role !== 'admin' &&
-      transaction.user.toString() !== req.user._id.toString() // ✅ FIXED
-    ) {
-      return res.status(403).json({ message: "Not authorized" });
-    }
-
+    // All roles can view
     res.status(200).json(transaction);
 
   } catch (error) {
@@ -114,8 +103,7 @@ const getTransactionById = async (req, res) => {
   }
 };
 
-
-// ✏️ Full update (PUT)
+// Full update (PUT)
 const updateTransaction = async (req, res) => {
   try {
     const transaction = await Transaction.findById(req.params.id);
@@ -144,7 +132,7 @@ const updateTransaction = async (req, res) => {
     );
 
     res.status(200).json({
-      message: "Transaction updated successfully ✅",
+      message: "Transaction updated successfully",
       updatedTransaction
     });
 
@@ -154,7 +142,7 @@ const updateTransaction = async (req, res) => {
 };
 
 
-// ✏️ Partial update (PATCH)
+// Partial update (PATCH)
 const partialUpdateTransaction = async (req, res) => {
   try {
     const transaction = await Transaction.findById(req.params.id);
@@ -181,7 +169,7 @@ const partialUpdateTransaction = async (req, res) => {
     const updatedTransaction = await transaction.save();
 
     res.status(200).json({
-      message: "Transaction updated successfully ✅",
+      message: "Transaction updated successfully",
       transaction: updatedTransaction
     });
 
@@ -191,7 +179,7 @@ const partialUpdateTransaction = async (req, res) => {
 };
 
 
-// ❌ Delete transaction
+// Delete transaction
 const deleteTransaction = async (req, res) => {
   try {
     const transaction = await Transaction.findById(req.params.id);
@@ -210,7 +198,7 @@ const deleteTransaction = async (req, res) => {
     await transaction.deleteOne();
 
     res.status(200).json({
-      message: "Transaction deleted successfully ✅"
+      message: "Transaction deleted successfully"
     });
 
   } catch (error) {
@@ -219,14 +207,10 @@ const deleteTransaction = async (req, res) => {
 };
 
 
-// 📊 Summary API
+// Summary API
 const getSummary = async (req, res) => {
   try {
     let match = {};
-
-    if (req.user.role !== 'admin') {
-      match.user = req.user._id; // ✅ consistent
-    }
 
     const totals = await Transaction.aggregate([
       { $match: match },
@@ -289,35 +273,40 @@ const getSummary = async (req, res) => {
 };
 
 
-// 📊 Stats API
+
+// Stats API
 const getStats = async (req, res) => {
   try {
     let match = {};
 
-    if (req.user.role !== 'admin') {
-      match.user = req.user._id; // ✅ FIXED
+    const stats = await Transaction.aggregate([
+      { $match: match },
+      { $match: { type: 'expense' } },
+      {
+        $group: {
+          _id: null,
+          highestExpense: { $max: '$amount' },
+          lowestExpense:  { $min: '$amount' },
+          averageExpense: { $avg: '$amount' },
+          totalExpenses:  { $sum: '$amount' },
+          count:          { $sum: 1 }
+        }
+      }
+    ]);
+
+    if (!stats.length) {
+      return res.status(200).json({ message: 'No expense data available' });
     }
 
-    const transactions = await Transaction.find(match);
+    const { highestExpense, lowestExpense, averageExpense, totalExpenses, count } = stats[0];
 
-    const expenses = transactions.filter(t => t.type === "expense");
-
-    if (expenses.length === 0) {
-      return res.status(200).json({
-        message: "No expense data available"
-      });
-    }
-
-    const amounts = expenses.map(e => e.amount);
-
-    const stats = {
-      highestExpense: Math.max(...amounts),
-      lowestExpense: Math.min(...amounts),
-      averageExpense:
-        amounts.reduce((a, b) => a + b, 0) / amounts.length
-    };
-
-    res.status(200).json(stats);
+    res.status(200).json({
+      highestExpense,
+      lowestExpense,
+      averageExpense: Math.round(averageExpense * 100) / 100,
+      totalExpenses,
+      count
+    });
 
   } catch (error) {
     res.status(500).json({ message: error.message });

@@ -28,7 +28,7 @@ const protect = async (req, res, next) => {
         });
       }
 
-      req.user = user; // ✅ use _id everywhere
+      req.user = user; 
       next();
 
     } catch (error) {

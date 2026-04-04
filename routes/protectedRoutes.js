@@ -4,7 +4,7 @@ const { protect, authorizeRoles } = require('../middleware/authMiddleware');
 
 router.get('/profile', protect, (req, res) => {
   res.json({
-    message: "Protected route accessed ✅",
+    message: "Protected route accessed",
     user: req.user
   });
 });

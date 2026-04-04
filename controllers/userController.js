@@ -1,6 +1,5 @@
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 
 
 // ➕ Create User (Admin only)
@@ -29,86 +28,87 @@ const createUser = async (req, res) => {
       name,
       email,
       password: hashedPassword,
-      role: role || "user", // prevent misuse
+      role: role || "viewer",
       isActive: true
     });
 
-    // hide password
     user.password = undefined;
 
     res.status(201).json({
-      message: "User created successfully ✅",
+      message: "User created successfully",
       user
     });
 
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    res.status(500).json({ message: error.message });
   }
 };
 
 
-// 🔐 Login User (MANDATORY)
-const loginUser = async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    // check user
-    const user = await User.findOne({ email });
-
-    if (!user) {
-      return res.status(400).json({ message: "Invalid credentials" });
-    }
-
-    // check active status
-    if (!user.isActive) {
-      return res.status(403).json({ message: "User is deactivated" });
-    }
-
-    // compare password
-    const isMatch = await bcrypt.compare(password, user.password);
-
-    if (!isMatch) {
-      return res.status(400).json({ message: "Invalid credentials" });
-    }
-
-    // generate token
-    const token = jwt.sign(
-      { id: user._id, role: user.role },
-      "SECRET_KEY", // move to .env later
-      { expiresIn: "7d" }
-    );
-
-    user.password = undefined;
-
-    res.status(200).json({
-      message: "Login successful ✅",
-      token,
-      user
-    });
-
-  } catch (error) {
-    return res.status(500).json({ message: error.message });
-  }
-};
-
-
-// 📄 Get All Users (Admin only)
+// Get All Users (Admin only)
 const getUsers = async (req, res) => {
   try {
     const users = await User.find().select('-password');
-
     res.status(200).json(users);
-
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    res.status(500).json({ message: error.message });
   }
 };
 
 
-// ✏️ Update User Role / Status
+// Get User By ID
+const getUserById = async (req, res) => {
+  try {
+    const userId = req.params.id;
+
+    // allow admin OR own profile
+    if (req.user.role !== 'admin' && req.user._id.toString() !== userId) {
+      return res.status(403).json({
+        message: "Access denied"
+      });
+    }
+
+    const user = await User.findById(userId).select('-password');
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found"
+      });
+    }
+
+    res.status(200).json(user);
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+// PUT - Full Update (Admin only)
 const updateUser = async (req, res) => {
   try {
-    const { role, isActive } = req.body;
+    const { name, password, role, isActive } = req.body || {};
+
+    // Only admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        message: "Access denied. Only admin can update users"
+      });
+    }
+
+    // Prevent self update
+    if (req.user._id.toString() === req.params.id) {
+      return res.status(403).json({
+        message: "You cannot modify your own account"
+      });
+    }
+
+    // Prevent email change
+    if (req.body.email !== undefined) {
+      return res.status(400).json({
+        message: "Email cannot be updated once created"
+      });
+    }
 
     const user = await User.findById(req.params.id);
 
@@ -118,51 +118,138 @@ const updateUser = async (req, res) => {
       });
     }
 
-    if (role) user.role = role;
+    // Validate role
+    const validRoles = ['viewer', 'analyst', 'admin'];
+    if (role !== undefined && !validRoles.includes(role)) {
+      return res.status(400).json({
+        message: `Invalid role. Must be one of: ${validRoles.join(', ')}`
+      });
+    }
+
+    // Update fields safely
+    if (name !== undefined) user.name = name;
+
+    if (password !== undefined) {
+      user.password = await bcrypt.hash(password, 10);
+    }
+
+    if (role !== undefined) user.role = role;
+
     if (isActive !== undefined) user.isActive = isActive;
 
     const updatedUser = await user.save();
-
     updatedUser.password = undefined;
 
     res.status(200).json({
-      message: "User updated successfully ✅",
+      message: "User updated successfully ",
       user: updatedUser
     });
 
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    res.status(500).json({ message: error.message });
   }
 };
 
 
-// ❌ Delete User
-const deleteUser = async (req, res) => {
+// PATCH - Partial Update (Admin only)
+const patchUser = async (req, res) => {
   try {
+    const updates = req.body;
+
+    // Only admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        message: "Access denied. Only admin can update users"
+      });
+    }
+
+    // Prevent self update
+    if (req.user._id.toString() === req.params.id) {
+      return res.status(403).json({
+        message: "You cannot update your own account"
+      });
+    }
+
+    // Prevent email change
+    if (updates.email !== undefined) {
+      return res.status(400).json({
+        message: "Email cannot be updated once created"
+      });
+    }
+
     const user = await User.findById(req.params.id);
 
     if (!user) {
-      return res.status(404).json({
-        message: "User not found"
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const validRoles = ['viewer', 'analyst', 'admin'];
+
+    // Allowed fields
+    if (updates.name !== undefined) user.name = updates.name;
+
+    if (updates.password !== undefined) {
+      user.password = await bcrypt.hash(updates.password, 10);
+    }
+
+    if (updates.role !== undefined) {
+      if (!validRoles.includes(updates.role)) {
+        return res.status(400).json({
+          message: `Invalid role. Must be one of: ${validRoles.join(', ')}`
+        });
+      }
+      user.role = updates.role;
+    }
+
+    if (updates.isActive !== undefined) user.isActive = updates.isActive;
+
+    const updatedUser = await user.save();
+    updatedUser.password = undefined;
+
+    res.status(200).json({
+      message: "User updated successfully",
+      user: updatedUser
+    });
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+// Delete User (Admin only)
+const deleteUser = async (req, res) => {
+  try {
+    // Prevent self delete
+    if (req.user._id.toString() === req.params.id) {
+      return res.status(403).json({
+        message: "You cannot delete your own account"
       });
+    }
+
+    const user = await User.findById(req.params.id);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
     }
 
     await user.deleteOne();
 
     res.status(200).json({
-      message: "User deleted successfully ✅"
+      message: "User deleted successfully"
     });
 
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    res.status(500).json({ message: error.message });
   }
 };
 
 
 module.exports = {
   createUser,
-  loginUser,   // ✅ added
   getUsers,
+  getUserById,
   updateUser,
+  patchUser,
   deleteUser
 };

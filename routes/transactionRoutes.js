@@ -22,7 +22,7 @@ const {
 
 
 // =======================
-// 📊 STATIC ROUTES FIRST
+// STATIC ROUTES FIRST
 // =======================
 
 // Summary
@@ -43,7 +43,7 @@ router.get(
 
 
 // =======================
-// 📄 COLLECTION ROUTES
+// COLLECTION ROUTES
 // =======================
 
 // Get all transactions
@@ -66,7 +66,7 @@ router.post(
 
 
 // =======================
-// 🔍 PARAM ROUTES (LAST)
+// PARAM ROUTES (LAST)
 // =======================
 
 // Get by ID
