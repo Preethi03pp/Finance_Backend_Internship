@@ -260,4 +260,147 @@ const deleteUser = async (req, res) => {
   }
 };
 
-module.exports = { createUser, getUsers, getUserById, updateUser, patchUser, deleteUser };
+// ➕ Bulk Create Users (Admin only)
+const bulkCreateUsers = async (req, res) => {
+  try {
+    const { users } = req.body;
+
+    if (!Array.isArray(users) || users.length === 0) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_INPUT',
+        message: 'users must be a non-empty array'
+      });
+    }
+
+    if (users.length > 50) {
+      return res.status(400).json({
+        success: false,
+        code: 'LIMIT_EXCEEDED',
+        message: 'Maximum 50 users allowed per bulk request'
+      });
+    }
+
+    const created = [];
+    const errors = [];
+
+    for (let i = 0; i < users.length; i++) {
+      try {
+        const { name, email, password, role } = users[i];
+
+        // Validate each user
+        if (!name || !email || !password) {
+          errors.push({ index: i, error: 'name, email and password are required' });
+          continue;
+        }
+
+        const userExists = await User.findOne({ email });
+        if (userExists) {
+          errors.push({ index: i, error: `Email ${email} already exists` });
+          continue;
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const user = await User.create({
+          name: name.trim(),
+          email: email.toLowerCase(),
+          password: hashedPassword,
+          role: role || 'viewer',
+          isActive: true
+        });
+
+        user.password = undefined;
+        created.push(user);
+
+      } catch (err) {
+        errors.push({ index: i, error: err.message });
+      }
+    }
+
+    res.status(errors.length === 0 ? 201 : 207).json({
+      success: true,
+      message: errors.length === 0
+        ? 'All users created successfully'
+        : 'Some users failed to create',
+      data: {
+        created_count: created.length,
+        error_count: errors.length,
+        created,
+        errors
+      }
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      code: 'SERVER_ERROR',
+      message: error.message
+    });
+  }
+};
+
+// 🔒 Bulk Deactivate Users (Admin only)
+const bulkDeactivateUsers = async (req, res) => {
+  try {
+    const { ids } = req.body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_INPUT',
+        message: 'ids must be a non-empty array'
+      });
+    }
+
+    if (ids.length > 50) {
+      return res.status(400).json({
+        success: false,
+        code: 'LIMIT_EXCEEDED',
+        message: 'Maximum 50 ids allowed per bulk request'
+      });
+    }
+
+    // Validate all ids
+    const invalidIds = ids.filter(id => !isValidObjectId(id));
+    if (invalidIds.length > 0) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_ID',
+        message: `Invalid IDs found: ${invalidIds.join(', ')}`
+      });
+    }
+
+    // Prevent admin from deactivating themselves
+    if (ids.includes(req.user._id.toString())) {
+      return res.status(403).json({
+        success: false,
+        code: 'FORBIDDEN',
+        message: 'You cannot deactivate your own account'
+      });
+    }
+
+    const result = await User.updateMany(
+      { _id: { $in: ids }, isDeleted: false },
+      { isActive: false }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Bulk deactivation completed',
+      data: {
+        matched: result.matchedCount,
+        deactivated: result.modifiedCount
+      }
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      code: 'SERVER_ERROR',
+      message: error.message
+    });
+  }
+};
+
+module.exports = { createUser, getUsers, getUserById, updateUser, patchUser, deleteUser, bulkCreateUsers, bulkDeactivateUsers };

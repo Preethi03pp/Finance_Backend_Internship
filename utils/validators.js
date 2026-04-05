@@ -6,7 +6,7 @@ const isValidEmail = (email) => {
 
 // Password strength validation
 const isValidPassword = (password) => {
-  return password && password.length >= 6;
+  return password && password.length >= 8;
 };
 
 // Amount validation

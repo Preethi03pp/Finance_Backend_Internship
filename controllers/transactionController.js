@@ -28,6 +28,7 @@ const addTransaction = async (req, res) => {
   }
 };
 
+// ➕ Bulk Create Transactions
 const bulkCreateTransactions = async (req, res) => {
   try {
     const { transactions } = req.body;
@@ -48,34 +49,137 @@ const bulkCreateTransactions = async (req, res) => {
       });
     }
 
-    const created = [];
-    const errors = [];
+    const result = await TransactionService.bulkCreate(transactions, req.user._id);
 
-    for (let i = 0; i < transactions.length; i++) {
-      try {
-        const { amount, type, category, description, date } = transactions[i];
+    res.status(result.error_count === 0 ? 201 : 207).json({
+      success: true,
+      message: result.error_count === 0
+        ? 'All transactions created successfully'
+        : 'Some transactions failed to create',
+      data: result
+    });
 
-        const transaction = await Transaction.create({
-          amount,
-          type,
-          category,
-          description: description || '',
-          date: date ? new Date(date) : Date.now(),
-          user: req.user._id
-        });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      code: 'SERVER_ERROR',
+      message: error.message
+    });
+  }
+};
 
-        created.push(transaction);
-      } catch (err) {
-        errors.push({ index: i, error: err.message });
-      }
+// 🗑️ Bulk Delete Transactions
+const bulkDeleteTransactions = async (req, res) => {
+  try {
+    const { ids } = req.body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_INPUT',
+        message: 'ids must be a non-empty array'
+      });
     }
 
-    res.status(errors.length === 0 ? 201 : 207).json({
+    if (ids.length > 100) {
+      return res.status(400).json({
+        success: false,
+        code: 'LIMIT_EXCEEDED',
+        message: 'Maximum 100 ids allowed per bulk request'
+      });
+    }
+
+    // Validate all ids
+    const invalidIds = ids.filter(id => !isValidObjectId(id));
+    if (invalidIds.length > 0) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_ID',
+        message: `Invalid IDs found: ${invalidIds.join(', ')}`
+      });
+    }
+
+    const result = await TransactionService.bulkDelete(ids);
+
+    res.status(200).json({
       success: true,
-      created_count: created.length,
-      error_count: errors.length,
-      created,
-      errors
+      message: 'Bulk delete completed',
+      data: result
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      code: 'SERVER_ERROR',
+      message: error.message
+    });
+  }
+};
+
+// ✏️ Bulk Update Transactions
+const bulkUpdateTransactions = async (req, res) => {
+  try {
+    const { ids, updates } = req.body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_INPUT',
+        message: 'ids must be a non-empty array'
+      });
+    }
+
+    if (!updates || Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_INPUT',
+        message: 'updates object is required'
+      });
+    }
+
+    if (ids.length > 100) {
+      return res.status(400).json({
+        success: false,
+        code: 'LIMIT_EXCEEDED',
+        message: 'Maximum 100 ids allowed per bulk request'
+      });
+    }
+
+    // Validate all ids
+    const invalidIds = ids.filter(id => !isValidObjectId(id));
+    if (invalidIds.length > 0) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_ID',
+        message: `Invalid IDs found: ${invalidIds.join(', ')}`
+      });
+    }
+
+    // Validate update fields
+    const allowedFields = ['category', 'type', 'description'];
+    const invalidFields = Object.keys(updates).filter(f => !allowedFields.includes(f));
+    if (invalidFields.length > 0) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_FIELDS',
+        message: `Cannot bulk update these fields: ${invalidFields.join(', ')}. Allowed: ${allowedFields.join(', ')}`
+      });
+    }
+
+    if (updates.type && !['income', 'expense'].includes(updates.type)) {
+      return res.status(422).json({
+        success: false,
+        code: 'VALIDATION_ERROR',
+        message: 'Type must be income or expense'
+      });
+    }
+
+    const result = await TransactionService.bulkUpdate(ids, updates);
+
+    res.status(200).json({
+      success: true,
+      message: 'Bulk update completed',
+      data: result
     });
 
   } catch (error) {
@@ -356,6 +460,8 @@ const getTopCategories = async (req, res) => {
 module.exports = {
   addTransaction,
   bulkCreateTransactions,
+  bulkDeleteTransactions,
+  bulkUpdateTransactions,
   getTransactions,
   getTransactionById,
   updateTransaction,

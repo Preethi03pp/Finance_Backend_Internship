@@ -221,4 +221,79 @@ const getTopCategories = async (limit = 5) => {
   }));
 };
 
-module.exports = { getSummary, getStats, getWeeklyTrends, getTopCategories };
+const bulkCreate = async (transactions, userId) => {
+  const created = [];
+  const errors = [];
+
+  for (let i = 0; i < transactions.length; i++) {
+    try {
+      const { amount, type, category, description, date } = transactions[i];
+
+      // Basic validation per record
+      if (!amount || !type || !category) {
+        errors.push({ index: i, error: 'amount, type and category are required' });
+        continue;
+      }
+
+      if (!['income', 'expense'].includes(type)) {
+        errors.push({ index: i, error: 'type must be income or expense' });
+        continue;
+      }
+
+      if (parseFloat(amount) <= 0) {
+        errors.push({ index: i, error: 'amount must be a positive number' });
+        continue;
+      }
+
+      const transaction = await Transaction.create({
+        amount: parseFloat(amount),
+        type,
+        category,
+        description: description || '',
+        date: date ? new Date(date) : Date.now(),
+        user: userId
+      });
+
+      created.push(transaction);
+
+    } catch (err) {
+      errors.push({ index: i, error: err.message });
+    }
+  }
+
+  return {
+    created_count: created.length,
+    error_count: errors.length,
+    created,
+    errors
+  };
+};
+
+const bulkDelete = async (ids) => {
+  const result = await Transaction.updateMany(
+    { _id: { $in: ids }, isDeleted: { $ne: true } },
+    { isDeleted: true, deletedAt: new Date() }
+  );
+  return {
+    matched: result.matchedCount,
+    deleted: result.modifiedCount
+  };
+};
+
+const bulkUpdate = async (ids, updates) => {
+  const allowedFields = {};
+  if (updates.category) allowedFields.category = updates.category;
+  if (updates.type) allowedFields.type = updates.type;
+  if (updates.description) allowedFields.description = updates.description;
+
+  const result = await Transaction.updateMany(
+    { _id: { $in: ids }, isDeleted: { $ne: true } },
+    { $set: allowedFields }
+  );
+
+  return {
+    matched: result.matchedCount,
+    updated: result.modifiedCount
+  };
+};
+module.exports = { getSummary, getStats, getWeeklyTrends, getTopCategories, bulkCreate, bulkDelete, bulkUpdate };
