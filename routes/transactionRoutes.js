@@ -11,6 +11,7 @@ const {
 
 const {
   addTransaction,
+  bulkCreateTransactions,
   getTransactions,
   getTransactionById,
   partialUpdateTransaction,
@@ -80,6 +81,11 @@ router.post(
   addTransaction
 );
 
+router.post(
+  '/bulk',
+   protect, 
+   authorizeRoles('admin'), 
+   bulkCreateTransactions);
 
 // =======================
 // PARAM ROUTES (LAST)

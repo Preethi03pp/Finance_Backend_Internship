@@ -28,6 +28,65 @@ const addTransaction = async (req, res) => {
   }
 };
 
+const bulkCreateTransactions = async (req, res) => {
+  try {
+    const { transactions } = req.body;
+
+    if (!Array.isArray(transactions) || transactions.length === 0) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_INPUT',
+        message: 'transactions must be a non-empty array'
+      });
+    }
+
+    if (transactions.length > 100) {
+      return res.status(400).json({
+        success: false,
+        code: 'LIMIT_EXCEEDED',
+        message: 'Maximum 100 transactions allowed per bulk request'
+      });
+    }
+
+    const created = [];
+    const errors = [];
+
+    for (let i = 0; i < transactions.length; i++) {
+      try {
+        const { amount, type, category, description, date } = transactions[i];
+
+        const transaction = await Transaction.create({
+          amount,
+          type,
+          category,
+          description: description || '',
+          date: date ? new Date(date) : Date.now(),
+          user: req.user._id
+        });
+
+        created.push(transaction);
+      } catch (err) {
+        errors.push({ index: i, error: err.message });
+      }
+    }
+
+    res.status(errors.length === 0 ? 201 : 207).json({
+      success: true,
+      created_count: created.length,
+      error_count: errors.length,
+      created,
+      errors
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      code: 'SERVER_ERROR',
+      message: error.message
+    });
+  }
+};
+
 // 📄 Get All Transactions
 const getTransactions = async (req, res) => {
   try {
@@ -296,6 +355,7 @@ const getTopCategories = async (req, res) => {
 
 module.exports = {
   addTransaction,
+  bulkCreateTransactions,
   getTransactions,
   getTransactionById,
   updateTransaction,
