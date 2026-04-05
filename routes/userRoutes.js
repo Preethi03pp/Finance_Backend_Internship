@@ -13,12 +13,16 @@ const {
   deleteUser,
   bulkCreateUsers,
   bulkDeactivateUsers,
+  bulkDeleteUsers,      // ← add
+  bulkUpdateUsers
 } = require('../controllers/userController');
 
 router.post('/',     protect, authorizeRoles('admin'), createUserValidation,  validate, createUser);
 router.get('/',      protect, authorizeRoles('admin'), getUsers);
 router.post('/bulk', protect, authorizeRoles('admin'), bulkCreateUsers);
 router.patch('/bulk/deactivate',protect, authorizeRoles('admin'), bulkDeactivateUsers);
+router.delete('/bulk', protect, authorizeRoles('admin'), bulkDeleteUsers);
+router.patch('/bulk', protect, authorizeRoles('admin'), bulkUpdateUsers);
 router.get('/:id',   protect, getUserById);
 router.patch('/:id', protect, authorizeRoles('admin'), patchUserValidation, validate, patchUser);
 router.put('/:id',   protect, authorizeRoles('admin'), updateUserValidation, validate, updateUser);

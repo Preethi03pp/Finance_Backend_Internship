@@ -403,4 +403,157 @@ const bulkDeactivateUsers = async (req, res) => {
   }
 };
 
-module.exports = { createUser, getUsers, getUserById, updateUser, patchUser, deleteUser, bulkCreateUsers, bulkDeactivateUsers };
+// 🗑️ Bulk Delete Users (soft delete)
+const bulkDeleteUsers = async (req, res) => {
+  try {
+    const { ids } = req.body || {};
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_INPUT',
+        message: 'ids must be a non-empty array'
+      });
+    }
+
+    if (ids.length > 50) {
+      return res.status(400).json({
+        success: false,
+        code: 'LIMIT_EXCEEDED',
+        message: 'Maximum 50 ids allowed per bulk request'
+      });
+    }
+
+    const invalidIds = ids.filter(id => !isValidObjectId(id));
+    if (invalidIds.length > 0) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_ID',
+        message: `Invalid IDs found: ${invalidIds.join(', ')}`
+      });
+    }
+
+    if (ids.includes(req.user._id.toString())) {
+      return res.status(403).json({
+        success: false,
+        code: 'FORBIDDEN',
+        message: 'You cannot delete your own account'
+      });
+    }
+
+    const result = await User.updateMany(
+      { _id: { $in: ids }, isDeleted: false },
+      { isDeleted: true, isActive: false }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Bulk delete completed',
+      data: {
+        matched: result.matchedCount,
+        deleted: result.modifiedCount
+      }
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      code: 'SERVER_ERROR',
+      message: error.message
+    });
+  }
+};
+
+// ✏️ Bulk Update Users
+const bulkUpdateUsers = async (req, res) => {
+  try {
+    const { ids, updates } = req.body || {};
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_INPUT',
+        message: 'ids must be a non-empty array'
+      });
+    }
+
+    if (!updates || Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_INPUT',
+        message: 'updates object is required'
+      });
+    }
+
+    if (ids.length > 50) {
+      return res.status(400).json({
+        success: false,
+        code: 'LIMIT_EXCEEDED',
+        message: 'Maximum 50 ids allowed per bulk request'
+      });
+    }
+
+    const invalidIds = ids.filter(id => !isValidObjectId(id));
+    if (invalidIds.length > 0) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_ID',
+        message: `Invalid IDs found: ${invalidIds.join(', ')}`
+      });
+    }
+
+    if (ids.includes(req.user._id.toString())) {
+      return res.status(403).json({
+        success: false,
+        code: 'FORBIDDEN',
+        message: 'You cannot update your own account'
+      });
+    }
+
+    // Only these fields allowed for bulk update
+    const allowedFields = ['role', 'isActive'];
+    const invalidFields = Object.keys(updates).filter(f => !allowedFields.includes(f));
+    if (invalidFields.length > 0) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_FIELDS',
+        message: `Cannot bulk update these fields: ${invalidFields.join(', ')}. Allowed: ${allowedFields.join(', ')}`
+      });
+    }
+
+    if (updates.role && !['viewer', 'analyst', 'admin'].includes(updates.role)) {
+      return res.status(422).json({
+        success: false,
+        code: 'VALIDATION_ERROR',
+        message: 'Role must be viewer, analyst or admin'
+      });
+    }
+
+    const allowedUpdates = {};
+    if (updates.role !== undefined) allowedUpdates.role = updates.role;
+    if (updates.isActive !== undefined) allowedUpdates.isActive = updates.isActive;
+
+    const result = await User.updateMany(
+      { _id: { $in: ids }, isDeleted: false },
+      { $set: allowedUpdates }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Bulk update completed',
+      data: {
+        matched: result.matchedCount,
+        updated: result.modifiedCount
+      }
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      code: 'SERVER_ERROR',
+      message: error.message
+    });
+  }
+};
+
+module.exports = { createUser, getUsers, getUserById, updateUser, patchUser, deleteUser, bulkCreateUsers, bulkDeactivateUsers, bulkDeleteUsers, bulkUpdateUsers  };
