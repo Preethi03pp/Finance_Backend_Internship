@@ -1,5 +1,6 @@
 const express = require('express');
 const dotenv = require('dotenv');
+const rateLimit = require('express-rate-limit');
 const authRoutes = require('./routes/authRoutes.js');
 const protectedRoutes = require('./routes/protectedRoutes.js');
 const userRoutes = require('./routes/userRoutes');
@@ -10,6 +11,37 @@ dotenv.config();
 
 const app = express();
 app.use(express.json());
+
+// =======================
+// 🔒 RATE LIMITING
+// =======================
+
+// Global limit — 100 requests per 15 minutes
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: {
+    success: false,
+    message: 'Too many requests, please try again after 15 minutes'
+  }
+});
+
+// Strict limit for login — 10 attempts per 15 minutes
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: {
+    success: false,
+    message: 'Too many login attempts, please try again after 15 minutes'
+  }
+});
+
+// Apply global limiter to all routes
+app.use(globalLimiter);
+
+// Apply strict limiter to login only
+app.use('/api/auth/login', loginLimiter);
+
 app.use('/api/protected', protectedRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/users', userRoutes);
