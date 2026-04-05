@@ -90,7 +90,7 @@ const bulkDeleteTransactions = async (req, res) => {
     }
 
     // Validate all ids
-    const invalidIds = ids.filter(id => !mongoose.Types.ObjectId.isValid(id));
+    const invalidIds = ids.filter(id => !isValidObjectId(id));
     if (invalidIds.length > 0) {
       return res.status(400).json({
         success: false,

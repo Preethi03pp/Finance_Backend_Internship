@@ -1,4 +1,5 @@
 const Transaction = require('../models/Transaction');
+const mongoose = require('mongoose');
 
 const getSummary = async (startDate, endDate) => {
   let dateFilter = { isDeleted: false };
@@ -270,8 +271,10 @@ const bulkCreate = async (transactions, userId) => {
 };
 
 const bulkDelete = async (ids) => {
+  const objectIds = ids.map(id => new mongoose.Types.ObjectId(id));  // explicit cast
+
   const result = await Transaction.updateMany(
-    { _id: { $in: ids }, isDeleted: { $ne: true } },
+    { _id: { $in: objectIds }, isDeleted: { $ne: true } },
     { isDeleted: true, deletedAt: new Date() }
   );
   return {
@@ -281,16 +284,17 @@ const bulkDelete = async (ids) => {
 };
 
 const bulkUpdate = async (ids, updates) => {
+  const objectIds = ids.map(id => new mongoose.Types.ObjectId(id));  // explicit cast
+
   const allowedFields = {};
-  if (updates.category) allowedFields.category = updates.category;
-  if (updates.type) allowedFields.type = updates.type;
-  if (updates.description) allowedFields.description = updates.description;
+  if (updates.category !== undefined) allowedFields.category = updates.category;
+  if (updates.type !== undefined) allowedFields.type = updates.type;
+  if (updates.description !== undefined) allowedFields.description = updates.description;
 
   const result = await Transaction.updateMany(
-    { _id: { $in: ids }, isDeleted: { $ne: true } },
+    { _id: { $in: objectIds }, isDeleted: { $ne: true } },
     { $set: allowedFields }
   );
-
   return {
     matched: result.matchedCount,
     updated: result.modifiedCount
