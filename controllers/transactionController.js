@@ -1,33 +1,51 @@
 const Transaction = require('../models/Transaction');
 const TransactionService = require('../services/transactionService');
+const { isValidAmount, isValidType, isValidDate, isValidObjectId } = require('../utils/validators');
 
 // ➕ Add transaction (Admin only)
 const addTransaction = async (req, res) => {
   try {
     const { amount, type, category, description, date } = req.body;
 
-    if (!amount || !type || !category) {
-      return res.status(400).json({
-        message: "Amount, type, and category are required"
+    // Validation
+    const errors = {};
+    if (!amount) errors.amount = 'Amount is required';
+    else if (!isValidAmount(amount)) errors.amount = 'Amount must be a positive number';
+    if (!type) errors.type = 'Type is required';
+    else if (!isValidType(type)) errors.type = 'Type must be income or expense';
+    if (!category || category.trim().length === 0) errors.category = 'Category is required';
+    if (date && !isValidDate(date)) errors.date = 'Invalid date format';
+
+    if (Object.keys(errors).length > 0) {
+      return res.status(422).json({
+        success: false,
+        code: 'VALIDATION_ERROR',
+        message: 'Validation failed',
+        errors
       });
     }
 
     const transaction = await Transaction.create({
-      amount,
+      amount: parseFloat(amount),
       type,
-      category,
-      description,
-      date: date || Date.now(),
+      category: category.trim(),
+      description: description || '',
+      date: date ? new Date(date) : Date.now(),
       user: req.user._id
     });
 
     res.status(201).json({
-      message: "Transaction added successfully",
+      success: true,
+      message: 'Transaction added successfully',
       transaction
     });
 
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({
+      success: false,
+      code: 'SERVER_ERROR',
+      message: error.message
+    });
   }
 };
 
@@ -87,29 +105,51 @@ const getTransactions = async (req, res) => {
 // Get single transaction
 const getTransactionById = async (req, res) => {
   try {
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_ID',
+        message: 'Invalid transaction ID format'
+      });
+    }
+
     const transaction = await Transaction.findOne({
       _id: req.params.id,
       isDeleted: { $ne: true }
     });
 
     if (!transaction) {
-      return res.status(404).json({ message: "Transaction not found" });
+      return res.status(404).json({
+        success: false,
+        code: 'NOT_FOUND',
+        message: 'Transaction not found'
+      });
     }
 
     if (
       req.user.role !== 'admin' &&
       transaction.user.toString() !== req.user._id.toString()
     ) {
-      return res.status(403).json({ message: "Not authorized" });
+      return res.status(403).json({
+        success: false,
+        code: 'FORBIDDEN',
+        message: 'You are not authorized to view this transaction'
+      });
     }
 
-    res.status(200).json(transaction);
+    res.status(200).json({
+      success: true,
+      data: transaction
+    });
 
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({
+      success: false,
+      code: 'SERVER_ERROR',
+      message: error.message
+    });
   }
 };
-
 // Full update (PUT)
 const updateTransaction = async (req, res) => {
   try {
