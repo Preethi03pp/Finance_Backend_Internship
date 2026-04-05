@@ -1,5 +1,5 @@
 const Transaction = require('../models/Transaction');
-
+const TransactionService = require('../services/transactionService');
 
 // ➕ Add transaction (Admin only)
 const addTransaction = async (req, res) => {
@@ -210,104 +210,20 @@ const deleteTransaction = async (req, res) => {
 // Summary API
 const getSummary = async (req, res) => {
   try {
-    let match = {};
-
-    const totals = await Transaction.aggregate([
-      { $match: match },
-      {
-        $group: {
-          _id: "$type",
-          total: { $sum: "$amount" }
-        }
-      }
-    ]);
-
-    let totalIncome = 0;
-    let totalExpenses = 0;
-
-    totals.forEach(t => {
-      if (t._id === "income") totalIncome = t.total;
-      if (t._id === "expense") totalExpenses = t.total;
-    });
-
-    const categoryData = await Transaction.aggregate([
-      { $match: match },
-      {
-        $group: {
-          _id: "$category",
-          total: { $sum: "$amount" }
-        }
-      }
-    ]);
-
-    const monthlyData = await Transaction.aggregate([
-      { $match: match },
-      {
-        $group: {
-          _id: {
-            year: { $year: "$date" },
-            month: { $month: "$date" }
-          },
-          total: { $sum: "$amount" }
-        }
-      },
-      { $sort: { "_id.year": 1, "_id.month": 1 } }
-    ]);
-
-    const recentTransactions = await Transaction.find(match)
-      .sort({ date: -1 })
-      .limit(5);
-
-    res.status(200).json({
-      totalIncome,
-      totalExpenses,
-      netBalance: totalIncome - totalExpenses,
-      categoryBreakdown: categoryData,
-      monthlyTrends: monthlyData,
-      recentTransactions
-    });
-
+    const summary = await TransactionService.getSummary();
+    res.status(200).json(summary);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
 
-
 // Stats API
+// 📊 Stats API
 const getStats = async (req, res) => {
   try {
-    let match = {};
-
-    const stats = await Transaction.aggregate([
-      { $match: match },
-      { $match: { type: 'expense' } },
-      {
-        $group: {
-          _id: null,
-          highestExpense: { $max: '$amount' },
-          lowestExpense:  { $min: '$amount' },
-          averageExpense: { $avg: '$amount' },
-          totalExpenses:  { $sum: '$amount' },
-          count:          { $sum: 1 }
-        }
-      }
-    ]);
-
-    if (!stats.length) {
-      return res.status(200).json({ message: 'No expense data available' });
-    }
-
-    const { highestExpense, lowestExpense, averageExpense, totalExpenses, count } = stats[0];
-
-    res.status(200).json({
-      highestExpense,
-      lowestExpense,
-      averageExpense: Math.round(averageExpense * 100) / 100,
-      totalExpenses,
-      count
-    });
-
+    const stats = await TransactionService.getStats();
+    res.status(200).json(stats);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

@@ -14,39 +14,33 @@ const protect = async (req, res, next) => {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
       const user = await User.findById(decoded.id)
-        .select('_id name email role isActive');
+        .select('_id name email role isActive isDeleted');
 
       if (!user) {
-        return res.status(401).json({
-          message: "User not found"
-        });
+        return res.status(401).json({ message: "User not found" });
       }
 
       if (!user.isActive) {
-        return res.status(403).json({
-          message: "User account is inactive"
-        });
+        return res.status(403).json({ message: "User account is inactive" });
       }
 
-      req.user = user; 
+      if (user.isDeleted) {
+        return res.status(403).json({ message: "User account has been deleted" });
+      }
+
+      req.user = user;
       next();
 
     } catch (error) {
       return res.status(401).json({
-        message:
-          error.name === "TokenExpiredError"
-            ? "Token expired"
-            : "Invalid token"
+        message: error.name === "TokenExpiredError" ? "Token expired" : "Invalid token"
       });
     }
   } else {
-    return res.status(401).json({
-      message: "Not authorized, no token"
-    });
+    return res.status(401).json({ message: "Not authorized, no token" });
   }
 };
 
-// Role-based middleware
 const authorizeRoles = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {
