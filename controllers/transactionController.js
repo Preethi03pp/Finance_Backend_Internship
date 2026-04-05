@@ -1,5 +1,5 @@
 const Transaction = require('../models/Transaction');
-const TransactionService = require('../services/transactionService');
+
 
 // ➕ Add transaction (Admin only)
 const addTransaction = async (req, res) => {
@@ -45,7 +45,7 @@ const getTransactions = async (req, res) => {
       search
     } = req.query;
 
-    let filter = {};
+    let filter = { isDeleted: { $ne: true } };
 
     if (type) filter.type = type;
     if (category) filter.category = category;
@@ -89,13 +89,7 @@ const getTransactions = async (req, res) => {
 // Get single transaction
 const getTransactionById = async (req, res) => {
   try {
-    const transaction = await Transaction.findById(req.params.id);
-
-    if (!transaction) {
-      return res.status(404).json({ message: "Transaction not found" });
-    }
-
-    // All roles can view
+    const transaction = await Transaction.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
     res.status(200).json(transaction);
 
   } catch (error) {
@@ -106,7 +100,7 @@ const getTransactionById = async (req, res) => {
 // Full update (PUT)
 const updateTransaction = async (req, res) => {
   try {
-    const transaction = await Transaction.findById(req.params.id);
+    const transaction = await Transaction.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
 
     if (!transaction) {
       return res.status(404).json({ message: "Transaction not found" });
@@ -145,7 +139,7 @@ const updateTransaction = async (req, res) => {
 // Partial update (PATCH)
 const partialUpdateTransaction = async (req, res) => {
   try {
-    const transaction = await Transaction.findById(req.params.id);
+    const transaction = await Transaction.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
 
     if (!transaction) {
       return res.status(404).json({ message: "Transaction not found" });
@@ -179,10 +173,10 @@ const partialUpdateTransaction = async (req, res) => {
 };
 
 
-// Delete transaction
+// Delete transaction (soft delete)
 const deleteTransaction = async (req, res) => {
   try {
-    const transaction = await Transaction.findById(req.params.id);
+    const transaction = await Transaction.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
 
     if (!transaction) {
       return res.status(404).json({ message: "Transaction not found" });
@@ -195,7 +189,9 @@ const deleteTransaction = async (req, res) => {
       return res.status(403).json({ message: "Not authorized" });
     }
 
-    await transaction.deleteOne();
+    transaction.isDeleted = true;
+    transaction.deletedAt = new Date();
+    await transaction.save();
 
     res.status(200).json({
       message: "Transaction deleted successfully"
@@ -210,20 +206,104 @@ const deleteTransaction = async (req, res) => {
 // Summary API
 const getSummary = async (req, res) => {
   try {
-    const summary = await TransactionService.getSummary();
-    res.status(200).json(summary);
+    let match = { isDeleted: { $ne: true } };
+
+    const totals = await Transaction.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: "$type",
+          total: { $sum: "$amount" }
+        }
+      }
+    ]);
+
+    let totalIncome = 0;
+    let totalExpenses = 0;
+
+    totals.forEach(t => {
+      if (t._id === "income") totalIncome = t.total;
+      if (t._id === "expense") totalExpenses = t.total;
+    });
+
+    const categoryData = await Transaction.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: "$category",
+          total: { $sum: "$amount" }
+        }
+      }
+    ]);
+
+    const monthlyData = await Transaction.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: {
+            year: { $year: "$date" },
+            month: { $month: "$date" }
+          },
+          total: { $sum: "$amount" }
+        }
+      },
+      { $sort: { "_id.year": 1, "_id.month": 1 } }
+    ]);
+
+    const recentTransactions = await Transaction.find(match)
+      .sort({ date: -1 })
+      .limit(5);
+
+    res.status(200).json({
+      totalIncome,
+      totalExpenses,
+      netBalance: totalIncome - totalExpenses,
+      categoryBreakdown: categoryData,
+      monthlyTrends: monthlyData,
+      recentTransactions
+    });
+
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
 
+
 // Stats API
-// 📊 Stats API
 const getStats = async (req, res) => {
   try {
-    const stats = await TransactionService.getStats();
-    res.status(200).json(stats);
+    let match = { isDeleted: { $ne: true } };
+
+    const stats = await Transaction.aggregate([
+      { $match: match },
+      { $match: { type: 'expense' } },
+      {
+        $group: {
+          _id: null,
+          highestExpense: { $max: '$amount' },
+          lowestExpense:  { $min: '$amount' },
+          averageExpense: { $avg: '$amount' },
+          totalExpenses:  { $sum: '$amount' },
+          count:          { $sum: 1 }
+        }
+      }
+    ]);
+
+    if (!stats.length) {
+      return res.status(200).json({ message: 'No expense data available' });
+    }
+
+    const { highestExpense, lowestExpense, averageExpense, totalExpenses, count } = stats[0];
+
+    res.status(200).json({
+      highestExpense,
+      lowestExpense,
+      averageExpense: Math.round(averageExpense * 100) / 100,
+      totalExpenses,
+      count
+    });
+
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

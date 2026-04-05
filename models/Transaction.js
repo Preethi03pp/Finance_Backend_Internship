@@ -28,6 +28,14 @@ const transactionSchema = new mongoose.Schema(
       type: Date,
       required: true,
       default: Date.now
+    },
+    isDeleted: {
+      type: Boolean,
+      default: false
+    },
+    deletedAt: {
+      type: Date,
+      default: null
     }
   },
   { timestamps: true }
