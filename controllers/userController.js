@@ -46,10 +46,54 @@ const createUser = async (req, res) => {
 
 
 // Get All Users (Admin only)
+// Get All Users (Admin only) — with pagination and search
 const getUsers = async (req, res) => {
   try {
-    const users = await User.find({ isDeleted: false }).select('-password');
-    res.status(200).json(users);
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      role,
+      isActive
+    } = req.query;
+
+    let filter = { isDeleted: false };
+
+    // Search by name or email
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Filter by role
+    if (role) {
+      filter.role = role;
+    }
+
+    // Filter by active status
+    if (isActive !== undefined) {
+      filter.isActive = isActive === 'true';
+    }
+
+    const skip = (page - 1) * limit;
+
+    const users = await User.find(filter)
+      .select('-password')
+      .skip(skip)
+      .limit(parseInt(limit))
+      .sort({ createdAt: -1 });
+
+    const total = await User.countDocuments(filter);
+
+    res.status(200).json({
+      total,
+      page: parseInt(page),
+      pages: Math.ceil(total / limit),
+      data: users
+    });
+
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
