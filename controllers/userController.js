@@ -1,29 +1,11 @@
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
-const { isValidEmail, isValidPassword, isValidRole, isValidObjectId } = require('../utils/validators');
+const { isValidObjectId } = require('../utils/validators'); // only need this one now
 
 // ➕ Create User (Admin only)
 const createUser = async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
-
-    // Validation
-    const errors = {};
-    if (!name || name.trim().length < 2) errors.name = 'Name must be at least 2 characters';
-    if (!email) errors.email = 'Email is required';
-    else if (!isValidEmail(email)) errors.email = 'Invalid email format';
-    if (!password) errors.password = 'Password is required';
-    else if (!isValidPassword(password)) errors.password = 'Password must be at least 6 characters';
-    if (role && !isValidRole(role)) errors.role = 'Role must be viewer, analyst or admin';
-
-    if (Object.keys(errors).length > 0) {
-      return res.status(422).json({
-        success: false,
-        code: 'VALIDATION_ERROR',
-        message: 'Validation failed',
-        errors
-      });
-    }
 
     const userExists = await User.findOne({ email });
     if (userExists) {
@@ -53,24 +35,14 @@ const createUser = async (req, res) => {
     });
 
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      code: 'SERVER_ERROR',
-      message: error.message
-    });
+    res.status(500).json({ success: false, code: 'SERVER_ERROR', message: error.message });
   }
 };
 
 // 📄 Get All Users (Admin only)
 const getUsers = async (req, res) => {
   try {
-    const {
-      page = 1,
-      limit = 10,
-      search,
-      role,
-      isActive
-    } = req.query;
+    const { page = 1, limit = 10, search, role, isActive } = req.query;
 
     let filter = { isDeleted: false };
 
@@ -81,20 +53,8 @@ const getUsers = async (req, res) => {
       ];
     }
 
-    if (role) {
-      if (!isValidRole(role)) {
-        return res.status(422).json({
-          success: false,
-          code: 'VALIDATION_ERROR',
-          message: 'Invalid role filter'
-        });
-      }
-      filter.role = role;
-    }
-
-    if (isActive !== undefined) {
-      filter.isActive = isActive === 'true';
-    }
+    if (role) filter.role = role;
+    if (isActive !== undefined) filter.isActive = isActive === 'true';
 
     const skip = (page - 1) * limit;
 
@@ -115,11 +75,7 @@ const getUsers = async (req, res) => {
     });
 
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      code: 'SERVER_ERROR',
-      message: error.message
-    });
+    res.status(500).json({ success: false, code: 'SERVER_ERROR', message: error.message });
   }
 };
 
@@ -152,17 +108,10 @@ const getUserById = async (req, res) => {
       });
     }
 
-    res.status(200).json({
-      success: true,
-      data: user
-    });
+    res.status(200).json({ success: true, data: user });
 
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      code: 'SERVER_ERROR',
-      message: error.message
-    });
+    res.status(500).json({ success: false, code: 'SERVER_ERROR', message: error.message });
   }
 };
 
@@ -171,11 +120,11 @@ const updateUser = async (req, res) => {
   try {
     const { name, password, role, isActive } = req.body;
 
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({
         success: false,
-        code: 'FORBIDDEN',
-        message: 'Access denied. Only admin can update users'
+        code: 'INVALID_ID',
+        message: 'Invalid user ID format'
       });
     }
 
@@ -187,38 +136,7 @@ const updateUser = async (req, res) => {
       });
     }
 
-    if (!isValidObjectId(req.params.id)) {
-      return res.status(400).json({
-        success: false,
-        code: 'INVALID_ID',
-        message: 'Invalid user ID format'
-      });
-    }
-
-    if (req.body.email !== undefined) {
-      return res.status(400).json({
-        success: false,
-        code: 'INVALID_OPERATION',
-        message: 'Email cannot be updated once created'
-      });
-    }
-
-    const errors = {};
-    if (name && name.trim().length < 2) errors.name = 'Name must be at least 2 characters';
-    if (password && !isValidPassword(password)) errors.password = 'Password must be at least 6 characters';
-    if (role && !isValidRole(role)) errors.role = 'Role must be viewer, analyst or admin';
-
-    if (Object.keys(errors).length > 0) {
-      return res.status(422).json({
-        success: false,
-        code: 'VALIDATION_ERROR',
-        message: 'Validation failed',
-        errors
-      });
-    }
-
     const user = await User.findById(req.params.id);
-
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -242,11 +160,7 @@ const updateUser = async (req, res) => {
     });
 
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      code: 'SERVER_ERROR',
-      message: error.message
-    });
+    res.status(500).json({ success: false, code: 'SERVER_ERROR', message: error.message });
   }
 };
 
@@ -255,11 +169,11 @@ const patchUser = async (req, res) => {
   try {
     const updates = req.body;
 
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({
         success: false,
-        code: 'FORBIDDEN',
-        message: 'Access denied. Only admin can update users'
+        code: 'INVALID_ID',
+        message: 'Invalid user ID format'
       });
     }
 
@@ -271,38 +185,7 @@ const patchUser = async (req, res) => {
       });
     }
 
-    if (!isValidObjectId(req.params.id)) {
-      return res.status(400).json({
-        success: false,
-        code: 'INVALID_ID',
-        message: 'Invalid user ID format'
-      });
-    }
-
-    if (updates.email !== undefined) {
-      return res.status(400).json({
-        success: false,
-        code: 'INVALID_OPERATION',
-        message: 'Email cannot be updated once created'
-      });
-    }
-
-    const errors = {};
-    if (updates.name && updates.name.trim().length < 2) errors.name = 'Name must be at least 2 characters';
-    if (updates.password && !isValidPassword(updates.password)) errors.password = 'Password must be at least 6 characters';
-    if (updates.role && !isValidRole(updates.role)) errors.role = 'Role must be viewer, analyst or admin';
-
-    if (Object.keys(errors).length > 0) {
-      return res.status(422).json({
-        success: false,
-        code: 'VALIDATION_ERROR',
-        message: 'Validation failed',
-        errors
-      });
-    }
-
     const user = await User.findById(req.params.id);
-
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -326,11 +209,7 @@ const patchUser = async (req, res) => {
     });
 
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      code: 'SERVER_ERROR',
-      message: error.message
-    });
+    res.status(500).json({ success: false, code: 'SERVER_ERROR', message: error.message });
   }
 };
 
@@ -354,7 +233,6 @@ const deleteUser = async (req, res) => {
     }
 
     const user = await User.findById(req.params.id);
-
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -375,25 +253,11 @@ const deleteUser = async (req, res) => {
     user.isActive = false;
     await user.save();
 
-    res.status(200).json({
-      success: true,
-      message: 'User deleted successfully'
-    });
+    res.status(200).json({ success: true, message: 'User deleted successfully' });
 
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      code: 'SERVER_ERROR',
-      message: error.message
-    });
+    res.status(500).json({ success: false, code: 'SERVER_ERROR', message: error.message });
   }
 };
 
-module.exports = {
-  createUser,
-  getUsers,
-  getUserById,
-  updateUser,
-  patchUser,
-  deleteUser
-};
+module.exports = { createUser, getUsers, getUserById, updateUser, patchUser, deleteUser };

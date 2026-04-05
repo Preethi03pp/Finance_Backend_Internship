@@ -30,7 +30,7 @@ const {
 router.get(
   '/summary',
   protect,
-  authorizeRoles('analyst', 'admin'),
+  authorizeRoles('viewer', 'analyst', 'admin'),
   getSummary
 );
 
@@ -38,7 +38,7 @@ router.get(
 router.get(
   '/stats',
   protect,
-  authorizeRoles('analyst', 'admin'),
+  authorizeRoles('viewer', 'analyst', 'admin'),
   getStats
 );
 
@@ -46,7 +46,7 @@ router.get(
 router.get(
   '/weekly-trends',
   protect,
-  authorizeRoles('analyst', 'admin'),
+  authorizeRoles('viewer', 'analyst', 'admin'),
   getWeeklyTrends
 );
 
@@ -54,7 +54,7 @@ router.get(
 router.get(
   '/top-categories',
   protect,
-  authorizeRoles('analyst', 'admin'),
+  authorizeRoles('viewer', 'analyst', 'admin'),
   getTopCategories
 );
 
@@ -66,7 +66,7 @@ router.get(
 router.get(
   '/',
   protect,
-  authorizeRoles('viewer', 'analyst', 'admin'),
+  authorizeRoles('analyst', 'admin'),
   getTransactions
 );
 
@@ -89,7 +89,7 @@ router.post(
 router.get(
   '/:id',
   protect,
-  authorizeRoles('viewer', 'analyst', 'admin'),
+  authorizeRoles('analyst', 'admin'),
   getTransactionById
 );
 
