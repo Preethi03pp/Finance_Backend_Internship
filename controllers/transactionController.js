@@ -1,5 +1,5 @@
 const Transaction = require('../models/Transaction');
-
+const TransactionService = require('../services/transactionService');
 
 // ➕ Add transaction (Admin only)
 const addTransaction = async (req, res) => {
@@ -18,7 +18,7 @@ const addTransaction = async (req, res) => {
       category,
       description,
       date: date || Date.now(),
-      user: req.user._id 
+      user: req.user._id
     });
 
     res.status(201).json({
@@ -30,7 +30,6 @@ const addTransaction = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-
 
 // Get all transactions
 const getTransactions = async (req, res) => {
@@ -69,7 +68,7 @@ const getTransactions = async (req, res) => {
     const transactions = await Transaction.find(filter)
       .skip(skip)
       .limit(parseInt(limit))
-      .sort({ date: -1 }); 
+      .sort({ date: -1 });
 
     const total = await Transaction.countDocuments(filter);
 
@@ -85,11 +84,25 @@ const getTransactions = async (req, res) => {
   }
 };
 
-
 // Get single transaction
 const getTransactionById = async (req, res) => {
   try {
-    const transaction = await Transaction.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
+    const transaction = await Transaction.findOne({
+      _id: req.params.id,
+      isDeleted: { $ne: true }
+    });
+
+    if (!transaction) {
+      return res.status(404).json({ message: "Transaction not found" });
+    }
+
+    if (
+      req.user.role !== 'admin' &&
+      transaction.user.toString() !== req.user._id.toString()
+    ) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
     res.status(200).json(transaction);
 
   } catch (error) {
@@ -100,7 +113,10 @@ const getTransactionById = async (req, res) => {
 // Full update (PUT)
 const updateTransaction = async (req, res) => {
   try {
-    const transaction = await Transaction.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
+    const transaction = await Transaction.findOne({
+      _id: req.params.id,
+      isDeleted: { $ne: true }
+    });
 
     if (!transaction) {
       return res.status(404).json({ message: "Transaction not found" });
@@ -135,11 +151,13 @@ const updateTransaction = async (req, res) => {
   }
 };
 
-
 // Partial update (PATCH)
 const partialUpdateTransaction = async (req, res) => {
   try {
-    const transaction = await Transaction.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
+    const transaction = await Transaction.findOne({
+      _id: req.params.id,
+      isDeleted: { $ne: true }
+    });
 
     if (!transaction) {
       return res.status(404).json({ message: "Transaction not found" });
@@ -172,11 +190,13 @@ const partialUpdateTransaction = async (req, res) => {
   }
 };
 
-
 // Delete transaction (soft delete)
 const deleteTransaction = async (req, res) => {
   try {
-    const transaction = await Transaction.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
+    const transaction = await Transaction.findOne({
+      _id: req.params.id,
+      isDeleted: { $ne: true }
+    });
 
     if (!transaction) {
       return res.status(404).json({ message: "Transaction not found" });
@@ -202,113 +222,47 @@ const deleteTransaction = async (req, res) => {
   }
 };
 
-
-// Summary API
+// 📊 Summary API — now uses service + supports date filter
 const getSummary = async (req, res) => {
   try {
-    let match = { isDeleted: { $ne: true } };
-
-    const totals = await Transaction.aggregate([
-      { $match: match },
-      {
-        $group: {
-          _id: "$type",
-          total: { $sum: "$amount" }
-        }
-      }
-    ]);
-
-    let totalIncome = 0;
-    let totalExpenses = 0;
-
-    totals.forEach(t => {
-      if (t._id === "income") totalIncome = t.total;
-      if (t._id === "expense") totalExpenses = t.total;
-    });
-
-    const categoryData = await Transaction.aggregate([
-      { $match: match },
-      {
-        $group: {
-          _id: "$category",
-          total: { $sum: "$amount" }
-        }
-      }
-    ]);
-
-    const monthlyData = await Transaction.aggregate([
-      { $match: match },
-      {
-        $group: {
-          _id: {
-            year: { $year: "$date" },
-            month: { $month: "$date" }
-          },
-          total: { $sum: "$amount" }
-        }
-      },
-      { $sort: { "_id.year": 1, "_id.month": 1 } }
-    ]);
-
-    const recentTransactions = await Transaction.find(match)
-      .sort({ date: -1 })
-      .limit(5);
-
-    res.status(200).json({
-      totalIncome,
-      totalExpenses,
-      netBalance: totalIncome - totalExpenses,
-      categoryBreakdown: categoryData,
-      monthlyTrends: monthlyData,
-      recentTransactions
-    });
-
+    const { startDate, endDate } = req.query;
+    const summary = await TransactionService.getSummary(startDate, endDate);
+    res.status(200).json(summary);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-
-
-// Stats API
+// 📊 Stats API
 const getStats = async (req, res) => {
   try {
-    let match = { isDeleted: { $ne: true } };
-
-    const stats = await Transaction.aggregate([
-      { $match: match },
-      { $match: { type: 'expense' } },
-      {
-        $group: {
-          _id: null,
-          highestExpense: { $max: '$amount' },
-          lowestExpense:  { $min: '$amount' },
-          averageExpense: { $avg: '$amount' },
-          totalExpenses:  { $sum: '$amount' },
-          count:          { $sum: 1 }
-        }
-      }
-    ]);
-
-    if (!stats.length) {
-      return res.status(200).json({ message: 'No expense data available' });
-    }
-
-    const { highestExpense, lowestExpense, averageExpense, totalExpenses, count } = stats[0];
-
-    res.status(200).json({
-      highestExpense,
-      lowestExpense,
-      averageExpense: Math.round(averageExpense * 100) / 100,
-      totalExpenses,
-      count
-    });
-
+    const stats = await TransactionService.getStats();
+    res.status(200).json(stats);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
+// 📊 Weekly Trends API
+const getWeeklyTrends = async (req, res) => {
+  try {
+    const trends = await TransactionService.getWeeklyTrends();
+    res.status(200).json(trends);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// 📊 Top Categories API
+const getTopCategories = async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 5;
+    const categories = await TransactionService.getTopCategories(limit);
+    res.status(200).json(categories);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
 
 module.exports = {
   addTransaction,
@@ -318,5 +272,7 @@ module.exports = {
   partialUpdateTransaction,
   deleteTransaction,
   getSummary,
-  getStats
+  getStats,
+  getWeeklyTrends,
+  getTopCategories
 };

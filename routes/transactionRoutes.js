@@ -17,14 +17,15 @@ const {
   updateTransaction,
   deleteTransaction,
   getSummary,
-  getStats
+  getStats,
+  getWeeklyTrends,
+  getTopCategories
 } = require('../controllers/transactionController');
 
 
 // =======================
 // STATIC ROUTES FIRST
 // =======================
-
 // Summary
 router.get(
   '/summary',
@@ -41,6 +42,21 @@ router.get(
   getStats
 );
 
+// Weekly Trends
+router.get(
+  '/weekly-trends',
+  protect,
+  authorizeRoles('analyst', 'admin'),
+  getWeeklyTrends
+);
+
+// Top Categories
+router.get(
+  '/top-categories',
+  protect,
+  authorizeRoles('analyst', 'admin'),
+  getTopCategories
+);
 
 // =======================
 // COLLECTION ROUTES
