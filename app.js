@@ -2,7 +2,6 @@ const express = require('express');
 const dotenv = require('dotenv');
 const rateLimit = require('express-rate-limit');
 const authRoutes = require('./routes/authRoutes.js');
-const protectedRoutes = require('./routes/protectedRoutes.js');
 const userRoutes = require('./routes/userRoutes');
 const transactionRoutes = require('./routes/transactionRoutes.js');
 const errorHandler = require('./middleware/errorMiddleware.js');
@@ -41,8 +40,6 @@ app.use(globalLimiter);
 
 // Apply strict limiter to login only
 app.use('/api/auth/login', loginLimiter);
-
-app.use('/api/protected', protectedRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/auth', authRoutes);
