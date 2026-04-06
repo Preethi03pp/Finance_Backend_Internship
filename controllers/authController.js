@@ -1,7 +1,7 @@
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { isValidEmail, isValidPassword } = require('../utils/validators');
+const { isValidEmail } = require('../utils/validators');
 
 // @desc Login user
 // @route POST /api/auth/login

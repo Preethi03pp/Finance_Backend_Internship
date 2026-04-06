@@ -175,8 +175,7 @@ finance-backend-internship/
 ├── routes/
 │   ├── authRoutes.js             # /api/auth
 │   ├── userRoutes.js             # /api/users
-│   ├── transactionRoutes.js      # /api/transactions
-│   └── protectedRoutes.js        # /api/protected (demo routes for auth verification)
+│   └── transactionRoutes.js      # /api/transactions
 ├── services/
 │   └── transactionService.js     # Business logic for bulk ops and analytics
 ├── utils/

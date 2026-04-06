@@ -1,7 +1,7 @@
 {
   "name": "finance-backend-internship",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "server.js",
   "description": "Finance dashboard backend with role-based access control",
   "author": "Preethi P Palankar",
   "license": "ISC",
