@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "description": "Finance dashboard backend with role-based access control",
-  "author": "Your Name",
+  "author": "Preethi P Palankar",
   "license": "ISC",
   "scripts": {
     "start": "node server.js",
