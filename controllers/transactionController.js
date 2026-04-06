@@ -253,14 +253,6 @@ const getTransactionById = async (req, res) => {
       });
     }
 
-    if (req.user.role !== 'admin' && transaction.user.toString() !== req.user._id.toString()) {
-      return res.status(403).json({
-        success: false,
-        code: 'FORBIDDEN',
-        message: 'You are not authorized to view this transaction'
-      });
-    }
-
     res.status(200).json({ success: true, data: transaction });
 
   } catch (error) {
